@@ -4,7 +4,7 @@ import { useLayoutEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { DECK_TOP, ROOF_LINE_LEN, STALLS, V3, roofDividers } from "@/lib/sim/layout";
-import { Engine } from "@/lib/sim/engine";
+import { Engine, Scenario } from "@/lib/sim/engine";
 
 const COL = {
   surround: "#b6b0a2",
@@ -81,14 +81,6 @@ function Ground() {
         <boxGeometry args={[400, 0.12, 9]} />
         <meshStandardMaterial color={COL.road} />
       </mesh>
-      <mesh position={[0, -0.08, -48]} receiveShadow>
-        <boxGeometry args={[400, 0.12, 11]} />
-        <meshStandardMaterial color={COL.road} />
-      </mesh>
-      <mesh position={[72, -0.09, -98]} receiveShadow>
-        <boxGeometry args={[11, 0.12, 100]} />
-        <meshStandardMaterial color={COL.road} />
-      </mesh>
       <mesh position={[0, -0.09, 95]} receiveShadow>
         <boxGeometry args={[11, 0.12, 110]} />
         <meshStandardMaterial color={COL.road} />
@@ -99,8 +91,7 @@ function Ground() {
 
 function Walls() {
   const segs: { pos: V3; size: V3 }[] = [
-    { pos: [-8.5, 1.2, -40], size: [83, 2.4, 0.6] },
-    { pos: [47, 1.2, -40], size: [6, 2.4, 0.6] },
+    { pos: [0, 1.2, -40], size: [100.6, 2.4, 0.6] },
     { pos: [50, 1.2, 0], size: [0.6, 2.4, 80] },
     { pos: [-50, 1.2, 0], size: [0.6, 2.4, 80] },
     { pos: [-39.5, 1.2, 40], size: [21, 2.4, 0.6] },
@@ -516,13 +507,8 @@ function Gates({ engine }: { engine: Engine }) {
         <boxGeometry args={[2.2, 2.6, 2.2]} />
         <meshStandardMaterial color={COL.wall} />
       </mesh>
-      <mesh position={[45.5, 1.3, -40]} castShadow>
-        <boxGeometry args={[2.2, 2.6, 2.2]} />
-        <meshStandardMaterial color={COL.wall} />
-      </mesh>
       <GateArm pivot={[28.9, 1.1, 41]} dir={1} isOpen={() => engine.simTime < engine.gateInBusyUntil} />
       <GateArm pivot={[-28.9, 1.1, 41]} dir={-1} isOpen={() => engine.simTime < engine.gateOutBusyUntil} />
-      <GateArm pivot={[43.7, 1.1, -40]} dir={1} isOpen={() => engine.simTime < engine.gateInNorthBusyUntil} />
     </group>
   );
 }
@@ -591,7 +577,86 @@ function Tree({ pos, s = 1 }: { pos: V3; s?: number }) {
   );
 }
 
-export default function Scene({ engine }: { engine: Engine }) {
+function StaticCar({ pos, heading, color }: { pos: V3; heading: number; color: string }) {
+  return (
+    <group position={pos} rotation={[0, heading, 0]}>
+      <mesh position={[0, 0.62, 0]} castShadow>
+        <boxGeometry args={[1.85, 0.6, 4.3]} />
+        <meshStandardMaterial color={color} metalness={0.25} roughness={0.5} />
+      </mesh>
+      <mesh position={[0, 1.12, -0.25]} castShadow>
+        <boxGeometry args={[1.6, 0.52, 2.1]} />
+        <meshStandardMaterial color="#2b3138" metalness={0.4} roughness={0.25} />
+      </mesh>
+      {([
+        [-0.92, 1.35],
+        [0.92, 1.35],
+        [-0.92, -1.35],
+        [0.92, -1.35],
+      ] as const).map(([x, z], i) => (
+        <mesh key={i} position={[x, 0.34, z]} rotation={[0, 0, Math.PI / 2]} castShadow>
+          <cylinderGeometry args={[0.34, 0.34, 0.26, 12]} />
+          <meshStandardMaterial color="#15161a" />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function IllegalParking() {
+  const cars: { pos: V3; heading: number; color: string }[] = [
+    { pos: [-42, 0, 39.6], heading: Math.PI / 2, color: "#c43a30" },
+    { pos: [-34, 0, 49.8], heading: -Math.PI / 2, color: "#e0c23a" },
+    { pos: [-18, 0, 39.6], heading: Math.PI / 2, color: "#37a394" },
+    { pos: [10, 0, 49.8], heading: -Math.PI / 2, color: "#f4f4f2" },
+    { pos: [26, 0, 39.6], heading: Math.PI / 2, color: "#3a6fb8" },
+    { pos: [44, 0, 49.8], heading: -Math.PI / 2, color: "#8a9097" },
+    { pos: [-2.8, 0, 72], heading: 0, color: "#3f9c5c" },
+    { pos: [2.8, 0, 87], heading: Math.PI, color: "#d98e2b" },
+  ];
+  return (
+    <group>
+      {cars.map((car, i) => (
+        <StaticCar key={i} {...car} />
+      ))}
+    </group>
+  );
+}
+
+function VacantLot() {
+  return (
+    <group>
+      <mesh position={[0, 0.01, 0]} receiveShadow>
+        <boxGeometry args={[92, 0.02, 72]} />
+        <meshStandardMaterial color="#2f2c28" roughness={0.85} />
+      </mesh>
+      <InstancedBoxes
+        items={[
+          { pos: [-46, 0.04, 0] },
+          { pos: [46, 0.04, 0] },
+          { pos: [0, 0.04, -36], rot: [0, Math.PI / 2, 0] },
+        ]}
+        size={[0.08, 0.03, 72]}
+        color="#d8d1c1"
+      />
+      <IllegalParking />
+      <Tree pos={[-44, 0, -34]} s={1.1} />
+      <Tree pos={[44, 0, -34]} />
+      <Tree pos={[-44, 0, 30]} s={0.95} />
+      <Tree pos={[44, 0, 30]} s={1.05} />
+    </group>
+  );
+}
+
+export default function Scene({ engine, scenario }: { engine: Engine; scenario: Scenario }) {
+  if (scenario === "before") {
+    return (
+      <group>
+        <Ground />
+        <VacantLot />
+      </group>
+    );
+  }
   return (
     <group>
       <Ground />
@@ -605,7 +670,6 @@ export default function Scene({ engine }: { engine: Engine }) {
       <Gates engine={engine} />
       <TextSprite text="ENTRANCE" bg="#1f8a4c" position={[25, 5.6, 44]} width={8.5} />
       <TextSprite text="EXIT" bg="#c43a30" position={[-25, 5.15, 44]} width={5.6} />
-      <TextSprite text="ENTRANCE 2" bg="#1f8a4c" position={[39, 5.6, -44]} width={8.5} />
       <Tree pos={[-44, 0, -34]} s={1.1} />
       <Tree pos={[44, 0, -34]} />
       <Tree pos={[-44, 0, 30]} s={0.95} />

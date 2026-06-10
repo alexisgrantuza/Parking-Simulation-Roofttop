@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
-import { Engine, Mode, Phase, Snapshot } from "@/lib/sim/engine";
+import { Engine, Mode, Phase, Scenario, Snapshot } from "@/lib/sim/engine";
 import Scene from "./Scene";
 import { Cars, DayNight, Ticker } from "./Cars";
 
@@ -67,7 +67,10 @@ export default function SimulationApp() {
   // The engine is seeded with random data, so it must only exist on the
   // client — creating it during SSR causes hydration mismatches.
   const [engine, setEngine] = useState<Engine | null>(null);
-  useEffect(() => setEngine(new Engine()), []);
+  useEffect(() => {
+    const id = window.setTimeout(() => setEngine(new Engine()), 0);
+    return () => window.clearTimeout(id);
+  }, []);
   if (!engine) return <div className="h-dvh w-full bg-black" />;
   return <SimulationView engine={engine} />;
 }
@@ -81,14 +84,16 @@ function SimulationView({ engine }: { engine: Engine }) {
   }, [engine]);
 
   const setMode = (m: Mode) => {
-    engine.mode = m;
+    engine.setMode(m);
+  };
+  const setScenario = (s: Scenario) => {
+    engine.setScenario(s);
   };
   const setSpeed = (s: number) => {
-    engine.timeScale = s;
-    engine.paused = false;
+    engine.setSpeed(s);
   };
 
-  const occPct = Math.round((snap.occupied / snap.totalStalls) * 100);
+  const occPct = snap.totalStalls > 0 ? Math.round((snap.occupied / snap.totalStalls) * 100) : 0;
   const phaseUi = PHASE_UI[snap.phase];
 
   return (
@@ -99,7 +104,7 @@ function SimulationView({ engine }: { engine: Engine }) {
         camera={{ position: [85, 68, 95], fov: 42, near: 1, far: 1200 }}
       >
         <DayNight engine={engine} />
-        <Scene engine={engine} />
+        <Scene engine={engine} scenario={snap.scenario} />
         <Cars engine={engine} />
         <Ticker engine={engine} />
         <OrbitControls
@@ -149,6 +154,18 @@ function SimulationView({ engine }: { engine: Engine }) {
           </div>
         </div>
 
+        <div className="space-y-1">
+          <div className="text-[10px] uppercase tracking-wider text-zinc-400">Scenario</div>
+          <div className="flex gap-1.5">
+            <Btn active={snap.scenario === "after"} onClick={() => setScenario("after")}>
+              With parking
+            </Btn>
+            <Btn active={snap.scenario === "before"} onClick={() => setScenario("before")}>
+              Before lot
+            </Btn>
+          </div>
+        </div>
+
         <div className="grid grid-cols-4 gap-2 text-center">
           {[
             ["Queue in", snap.queueIn],
@@ -169,7 +186,7 @@ function SimulationView({ engine }: { engine: Engine }) {
             Simulation speed
           </div>
           <div className="flex gap-1.5">
-            <Btn active={snap.paused} onClick={() => (engine.paused = !engine.paused)}>
+            <Btn active={snap.paused} onClick={() => engine.togglePaused()}>
               {snap.paused ? "▶ Play" : "⏸ Pause"}
             </Btn>
             {[5, 15, 60].map((s) => (

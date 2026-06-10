@@ -5,11 +5,9 @@
 //   1-3pm normal   | 3-8pm RUSH | 8pm-12mn normal
 
 import {
-  EntranceId,
   Route,
   STALLS,
   SPAWN,
-  SPAWN_NORTH,
   buildRoute,
   entranceQueuePoint,
   exitQueuePoint,
@@ -24,6 +22,7 @@ import {
 export type CarState = "road" | "queueIn" | "driveIn" | "parked" | "driveOut" | "queueOut" | "leave";
 export type Mode = "auto" | "peak" | "off";
 export type Phase = "rush" | "normal" | "night";
+export type Scenario = "after" | "before";
 
 export interface CarObj {
   id: number;
@@ -37,7 +36,6 @@ export interface CarObj {
   legIdx: number;
   dist: number;
   stallId: number;
-  entrance: EntranceId;
   departAt: number;
 }
 
@@ -53,6 +51,7 @@ export interface Snapshot {
   timeScale: number;
   paused: boolean;
   mode: Mode;
+  scenario: Scenario;
 }
 
 const GATE_SERVICE = 12; // sim seconds per car at a barrier
@@ -62,6 +61,9 @@ const NIGHT_RATE = 4;
 const ROAD_RUSH_RATE = 900; // passing road cars per hour
 const ROAD_NORMAL_RATE = 220;
 const ROAD_NIGHT_RATE = 30;
+const BEFORE_ROAD_RUSH_RATE = 1500;
+const BEFORE_ROAD_NORMAL_RATE = 420;
+const BEFORE_ROAD_NIGHT_RATE = 80;
 const DRIVE_SPEED = 7; // m per sim second
 const REVERSE_SPEED = 2.4;
 const QUEUE_SPEED = 4.5;
@@ -94,23 +96,6 @@ const ROAD_ROUTES: V3[][] = [
     [0, 0, 45.5],
     [72, 0, 45.5],
   ],
-  [
-    [96, 0, -48.5],
-    [-96, 0, -48.5],
-  ],
-  [
-    [-96, 0, -45.5],
-    [96, 0, -45.5],
-  ],
-  [
-    [72, 0, -148],
-    [72, 0, -48.5],
-    [-72, 0, -48.5],
-  ],
-  [
-    [75, 0, -48.5],
-    [75, 0, -148],
-  ],
 ];
 
 function angleDamp(current: number, target: number, k: number): number {
@@ -125,14 +110,13 @@ export class Engine {
   timeScale = 15;
   paused = false;
   mode: Mode = "auto";
+  scenario: Scenario = "after";
 
   cars: CarObj[] = [];
   stallFree: boolean[] = STALLS.map(() => true);
   entranceQ: CarObj[] = [];
-  entranceQNorth: CarObj[] = [];
   exitQ: CarObj[] = [];
   gateInBusyUntil = 0;
-  gateInNorthBusyUntil = 0;
   gateOutBusyUntil = 0;
   entered = 0;
   exited = 0;
@@ -177,6 +161,9 @@ export class Engine {
 
   private roadRate(): number {
     const p = this.phase();
+    if (this.scenario === "before") {
+      return p === "rush" ? BEFORE_ROAD_RUSH_RATE : p === "normal" ? BEFORE_ROAD_NORMAL_RATE : BEFORE_ROAD_NIGHT_RATE;
+    }
     return p === "rush" ? ROAD_RUSH_RATE : p === "normal" ? ROAD_NORMAL_RATE : ROAD_NIGHT_RATE;
   }
 
@@ -212,29 +199,31 @@ export class Engine {
       legIdx: 0,
       dist: 0,
       stallId: -1,
-      entrance: "east",
       departAt: 0,
     };
   }
 
   private spawnParkingArrival() {
-    const entrance = this.pickEntrance();
-    const car = this.makeCar("queueIn", entrance === "north" ? SPAWN_NORTH : SPAWN, -Math.PI / 2);
-    car.entrance = entrance;
+    const car = this.takeRoadCarForParking() ?? this.makeCar("queueIn", SPAWN, -Math.PI / 2);
+    car.state = "queueIn";
+    car.legs = [];
+    car.legIdx = 0;
+    car.dist = 0;
+    car.stallId = -1;
     this.cars.push(car);
-    this.entranceQueue(entrance).push(car);
+    this.entranceQ.push(car);
     this.bump();
   }
 
-  private entranceQueue(entrance: EntranceId): CarObj[] {
-    return entrance === "north" ? this.entranceQNorth : this.entranceQ;
-  }
-
-  private pickEntrance(): EntranceId {
-    const eastLoad = this.entranceQ.length + (this.simTime < this.gateInBusyUntil ? 1 : 0);
-    const northLoad = this.entranceQNorth.length + (this.simTime < this.gateInNorthBusyUntil ? 1 : 0);
-    if (eastLoad === northLoad) return Math.random() < 0.5 ? "east" : "north";
-    return northLoad < eastLoad ? "north" : "east";
+  private takeRoadCarForParking(): CarObj | null {
+    const candidates = this.cars
+      .filter((car) => car.state === "road" && car.z > 38 && car.z < 51 && car.x > 24)
+      .sort((a, b) => Math.hypot(a.x - 25, a.z - 42.5) - Math.hypot(b.x - 25, b.z - 42.5));
+    const car = candidates[0];
+    if (!car) return null;
+    const idx = this.cars.indexOf(car);
+    if (idx >= 0) this.cars.splice(idx, 1);
+    return car;
   }
 
   private spawnRoadCar() {
@@ -262,12 +251,45 @@ export class Engine {
   }
 
   private seedRoadTraffic(phase: Phase) {
-    const count = phase === "rush" ? 18 : phase === "normal" ? 8 : 3;
+    const count =
+      this.scenario === "before"
+        ? phase === "rush"
+          ? 32
+          : phase === "normal"
+            ? 14
+            : 5
+        : phase === "rush"
+          ? 18
+          : phase === "normal"
+            ? 8
+            : 3;
     for (let i = 0; i < count; i++) {
       const pts = ROAD_ROUTES[i % ROAD_ROUTES.length];
       const route = buildRoute(pts, 6);
       this.cars.push(this.makeRoadCar(pts, Math.random() * route.len * 0.92));
     }
+  }
+
+  setScenario(scenario: Scenario) {
+    if (this.scenario === scenario) return;
+    this.scenario = scenario;
+    this.jumpTo(Math.floor(this.clockSec() / 60));
+  }
+
+  setMode(mode: Mode) {
+    this.mode = mode;
+    this.bump();
+  }
+
+  setSpeed(speed: number) {
+    this.timeScale = speed;
+    this.paused = false;
+    this.bump();
+  }
+
+  togglePaused() {
+    this.paused = !this.paused;
+    this.bump();
   }
 
   /** Jump the clock to a minute-of-day and reseed a plausible lot state. */
@@ -277,35 +299,28 @@ export class Engine {
     if (this.simTime < 0) this.simTime += 86400;
     this.cars = [];
     this.entranceQ = [];
-    this.entranceQNorth = [];
     this.exitQ = [];
     this.stallFree = STALLS.map(() => true);
     this.gateInBusyUntil = 0;
-    this.gateInNorthBusyUntil = 0;
     this.gateOutBusyUntil = 0;
 
     const p = this.phase();
-    const fill = p === "rush" ? 0.78 : p === "normal" ? 0.34 : 0.08;
-    for (const s of STALLS) {
-      if (Math.random() < fill) {
-        const car = this.makeCar("parked", s.pos, s.heading);
-        car.stallId = s.id;
-        car.departAt = this.simTime + this.dwellSec() * (0.15 + Math.random() * 0.85);
-        this.stallFree[s.id] = false;
-        this.cars.push(car);
-      }
-    }
-    if (p === "rush") {
-      for (let i = 0; i < 4; i++) {
-        const entrance: EntranceId = i % 2 === 0 ? "east" : "north";
-        const pt = entranceQueuePoint(Math.floor(i / 2), entrance);
-        const car = this.makeCar("queueIn", pt, -Math.PI / 2);
-        car.entrance = entrance;
-        this.cars.push(car);
-        this.entranceQueue(entrance).push(car);
+    if (this.scenario === "after") {
+      const fill = p === "rush" ? 0.78 : p === "normal" ? 0.34 : 0.08;
+      for (const s of STALLS) {
+        if (Math.random() < fill) {
+          const car = this.makeCar("parked", s.pos, s.heading);
+          car.stallId = s.id;
+          car.departAt = this.simTime + this.dwellSec() * (0.15 + Math.random() * 0.85);
+          this.stallFree[s.id] = false;
+          this.cars.push(car);
+        }
       }
     }
     this.seedRoadTraffic(p);
+    if (this.scenario === "after" && p === "rush") {
+      for (let i = 0; i < 5; i++) this.spawnParkingArrival();
+    }
     this.bump();
   }
 
@@ -317,8 +332,9 @@ export class Engine {
     // Poisson-ish parking arrivals: road cars that turn into the entrance.
     const lambda = this.arrivalRate() / 3600;
     if (
+      this.scenario === "after" &&
       Math.random() < lambda * dt &&
-      this.entranceQ.length + this.entranceQNorth.length < MAX_ENTRANCE_QUEUE * 2 &&
+      this.entranceQ.length < MAX_ENTRANCE_QUEUE &&
       this.cars.length < 90
     ) {
       this.spawnParkingArrival();
@@ -341,8 +357,7 @@ export class Engine {
   }
 
   private processGates() {
-    this.processEntranceGate("east");
-    this.processEntranceGate("north");
+    this.processEntranceGate();
     const ofront = this.exitQ[0];
     if (ofront && this.simTime >= this.gateOutBusyUntil && this.near(ofront, exitQueuePoint(0), 1.6)) {
       this.exitQ.shift();
@@ -354,23 +369,22 @@ export class Engine {
     }
   }
 
-  private processEntranceGate(entrance: EntranceId) {
-    const queue = this.entranceQueue(entrance);
-    const gateBusyUntil = entrance === "north" ? this.gateInNorthBusyUntil : this.gateInBusyUntil;
+  private processEntranceGate() {
+    const queue = this.entranceQ;
+    const gateBusyUntil = this.gateInBusyUntil;
     const front = queue[0];
-    if (front && this.simTime >= gateBusyUntil && this.near(front, entranceQueuePoint(0, entrance), 1.6)) {
+    if (front && this.simTime >= gateBusyUntil && this.near(front, entranceQueuePoint(0), 1.6)) {
       const stallId = this.pickStall();
       if (stallId !== null) {
         const s = STALLS[stallId];
         this.stallFree[stallId] = false;
         queue.shift();
-        front.legs = [{ route: buildRoute(inboundWaypoints(s, [front.x, 0, front.z], entrance)), rev: false }];
+        front.legs = [{ route: buildRoute(inboundWaypoints(s, [front.x, 0, front.z])), rev: false }];
         front.legIdx = 0;
         front.dist = 0;
         front.stallId = stallId;
         front.state = "driveIn";
-        if (entrance === "north") this.gateInNorthBusyUntil = this.simTime + GATE_SERVICE;
-        else this.gateInBusyUntil = this.simTime + GATE_SERVICE;
+        this.gateInBusyUntil = this.simTime + GATE_SERVICE;
         this.entered++;
       }
     }
@@ -433,9 +447,8 @@ export class Engine {
         break;
       }
       case "queueIn": {
-        const queue = this.entranceQueue(car.entrance);
-        const idx = queue.indexOf(car);
-        if (idx >= 0) this.moveTowards(car, entranceQueuePoint(idx, car.entrance), QUEUE_SPEED, dt, dtReal);
+        const idx = this.entranceQ.indexOf(car);
+        if (idx >= 0) this.moveTowards(car, entranceQueuePoint(idx), QUEUE_SPEED, dt, dtReal);
         break;
       }
       case "driveIn": {
@@ -489,18 +502,20 @@ export class Engine {
   }
 
   snapshot(): Snapshot {
+    const hasParking = this.scenario === "after";
     return {
       clockMin: Math.floor(this.clockSec() / 60),
       phase: this.phase(),
-      occupied: this.stallFree.filter((f) => !f).length,
-      totalStalls: STALLS.length,
-      queueIn: this.entranceQ.length + this.entranceQNorth.length,
+      occupied: hasParking ? this.stallFree.filter((f) => !f).length : 0,
+      totalStalls: hasParking ? STALLS.length : 0,
+      queueIn: this.entranceQ.length,
       queueOut: this.exitQ.length,
       entered: this.entered,
       exited: this.exited,
       timeScale: this.timeScale,
       paused: this.paused,
       mode: this.mode,
+      scenario: this.scenario,
     };
   }
 }
