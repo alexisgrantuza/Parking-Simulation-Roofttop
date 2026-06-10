@@ -355,8 +355,11 @@ export class Engine {
     this.stallFree = STALLS.map(() => true);
     this.gateInBusyUntil = 0;
     this.gateOutBusyUntil = 0;
+    this.entered = 0;
+    this.exited = 0;
 
     const p = this.phase();
+    let seededOccupied = 0;
     if (this.scenario === "after") {
       const fill = p === "rush" ? 0.78 : p === "normal" ? 0.34 : 0.08;
       for (const s of STALLS) {
@@ -366,8 +369,10 @@ export class Engine {
           car.departAt = this.simTime + this.dwellSec() * (0.15 + Math.random() * 0.85);
           this.stallFree[s.id] = false;
           this.cars.push(car);
+          seededOccupied++;
         }
       }
+      this.entered = seededOccupied;
     }
     this.seedRoadTraffic(p);
     if (this.scenario === "after" && p === "rush") {
