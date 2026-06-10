@@ -74,17 +74,156 @@ function MotorMesh({ car }: { car: CarObj }) {
   );
 }
 
+function TricycleMesh({ car }: { car: CarObj }) {
+  const g = useRef<THREE.Group>(null);
+  useFrame(() => {
+    const grp = g.current;
+    if (!grp) return;
+    grp.position.set(car.x, car.y, car.z);
+    grp.rotation.y = car.heading;
+  });
+  return (
+    <group ref={g}>
+      {/* motorcycle body and front fork */}
+      <mesh position={[-0.42, 0.56, 0.25]} rotation={[0, 0.12, 0]} castShadow>
+        <boxGeometry args={[0.36, 0.24, 1.55]} />
+        <meshStandardMaterial color="#1b1f25" metalness={0.35} roughness={0.35} />
+      </mesh>
+      <mesh position={[-0.42, 0.76, -0.3]} castShadow>
+        <boxGeometry args={[0.46, 0.16, 0.62]} />
+        <meshStandardMaterial color={car.color} metalness={0.25} roughness={0.45} />
+      </mesh>
+      <mesh position={[-0.42, 0.94, 0.92]} castShadow>
+        <boxGeometry args={[0.82, 0.06, 0.08]} />
+        <meshStandardMaterial color="#111216" />
+      </mesh>
+
+      {/* sidecar cab */}
+      <mesh position={[0.58, 0.74, -0.15]} castShadow>
+        <boxGeometry args={[1.02, 0.78, 1.38]} />
+        <meshStandardMaterial color="#2a2d32" metalness={0.3} roughness={0.38} />
+      </mesh>
+      <mesh position={[0.58, 0.9, 0.43]} castShadow>
+        <boxGeometry args={[0.9, 0.36, 0.1]} />
+        <meshStandardMaterial color="#101214" metalness={0.2} roughness={0.2} />
+      </mesh>
+      <mesh position={[0.06, 0.74, -0.08]} rotation={[0, 0.18, 0]} castShadow>
+        <boxGeometry args={[0.08, 0.68, 1.16]} />
+        <meshStandardMaterial color="#d95b2a" roughness={0.42} />
+      </mesh>
+      <mesh position={[0.06, 0.78, -0.08]} rotation={[0, 0.18, 0]} castShadow>
+        <boxGeometry args={[0.09, 0.38, 0.66]} />
+        <meshStandardMaterial color="#f16a2f" roughness={0.35} />
+      </mesh>
+
+      {/* canopy roof and supports */}
+      <mesh position={[0.15, 1.44, -0.12]} rotation={[0, 0, -0.08]} castShadow>
+        <boxGeometry args={[1.85, 0.08, 1.72]} />
+        <meshStandardMaterial color="#202936" metalness={0.35} roughness={0.3} />
+      </mesh>
+      {([
+        [-0.5, -0.72],
+        [0.95, -0.72],
+        [-0.5, 0.58],
+        [0.95, 0.58],
+      ] as const).map(([x, z], i) => (
+        <mesh key={i} position={[x, 1.08, z]} castShadow>
+          <cylinderGeometry args={[0.025, 0.025, 0.7, 6]} />
+          <meshStandardMaterial color="#d8d1c1" metalness={0.5} roughness={0.28} />
+        </mesh>
+      ))}
+
+      {/* wheels */}
+      {([
+        [-0.42, 1.0],
+        [0.78, -0.78],
+        [0.78, 0.72],
+      ] as const).map(([x, z], i) => (
+        <mesh key={i} position={[x, 0.32, z]} rotation={[0, Math.PI / 2, 0]} castShadow>
+          <torusGeometry args={[0.24, 0.05, 8, 16]} />
+          <meshStandardMaterial color="#111216" />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function PublicTransportMesh({ car }: { car: CarObj }) {
+  const g = useRef<THREE.Group>(null);
+  useFrame(() => {
+    const grp = g.current;
+    if (!grp) return;
+    grp.position.set(car.x, car.y, car.z);
+    grp.rotation.y = car.heading;
+  });
+  return (
+    <group ref={g}>
+      <mesh position={[0, 0.78, 0]} castShadow>
+        <boxGeometry args={[2.15, 1.0, 5.6]} />
+        <meshStandardMaterial color={car.color} metalness={0.2} roughness={0.55} />
+      </mesh>
+      <mesh position={[0, 1.22, -0.15]} castShadow>
+        <boxGeometry args={[1.9, 0.36, 4.2]} />
+        <meshStandardMaterial color="#e8e6e1" roughness={0.35} />
+      </mesh>
+      {([-1.08, 1.08] as const).flatMap((x) =>
+        ([-1.65, 1.65] as const).map((z) => (
+          <mesh key={`${x}-${z}`} position={[x, 0.36, z]} rotation={[0, 0, Math.PI / 2]} castShadow>
+            <cylinderGeometry args={[0.36, 0.36, 0.28, 12]} />
+            <meshStandardMaterial color="#15161a" />
+          </mesh>
+        )),
+      )}
+    </group>
+  );
+}
+
+function OtherVehicleMesh({ car }: { car: CarObj }) {
+  const g = useRef<THREE.Group>(null);
+  useFrame(() => {
+    const grp = g.current;
+    if (!grp) return;
+    grp.position.set(car.x, car.y, car.z);
+    grp.rotation.y = car.heading;
+  });
+  return (
+    <group ref={g}>
+      <mesh position={[0, 0.74, 0]} castShadow>
+        <boxGeometry args={[2.05, 0.86, 4.9]} />
+        <meshStandardMaterial color={car.color} metalness={0.22} roughness={0.55} />
+      </mesh>
+      <mesh position={[0, 1.18, 0.55]} castShadow>
+        <boxGeometry args={[1.75, 0.46, 2.1]} />
+        <meshStandardMaterial color="#2b3138" metalness={0.35} roughness={0.3} />
+      </mesh>
+      {([-1.02, 1.02] as const).flatMap((x) =>
+        ([-1.45, 1.45] as const).map((z) => (
+          <mesh key={`${x}-${z}`} position={[x, 0.34, z]} rotation={[0, 0, Math.PI / 2]} castShadow>
+            <cylinderGeometry args={[0.34, 0.34, 0.28, 12]} />
+            <meshStandardMaterial color="#15161a" />
+          </mesh>
+        )),
+      )}
+    </group>
+  );
+}
+
+function VehicleMesh({ car }: { car: CarObj }) {
+  if (car.stallId >= 0 && STALLS[car.stallId]?.vehicle === "motor") return <MotorMesh car={car} />;
+  if (car.vehicleKind === "motorcycle") return <MotorMesh car={car} />;
+  if (car.vehicleKind === "tricycle") return <TricycleMesh car={car} />;
+  if (car.vehicleKind === "public") return <PublicTransportMesh car={car} />;
+  if (car.vehicleKind === "other") return <OtherVehicleMesh car={car} />;
+  return <CarMesh car={car} />;
+}
+
 export function Cars({ engine }: { engine: Engine }) {
   useSyncExternalStore(engine.subscribe, engine.getVersion, engine.getVersion);
   return (
     <>
-      {engine.cars.map((c) =>
-        c.stallId >= 0 && STALLS[c.stallId]?.vehicle === "motor" ? (
-          <MotorMesh key={c.id} car={c} />
-        ) : (
-          <CarMesh key={c.id} car={c} />
-        ),
-      )}
+      {engine.cars.map((c) => (
+        <VehicleMesh key={c.id} car={c} />
+      ))}
     </>
   );
 }

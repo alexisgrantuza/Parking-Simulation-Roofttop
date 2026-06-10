@@ -23,6 +23,7 @@ export type CarState = "road" | "queueIn" | "driveIn" | "parked" | "driveOut" | 
 export type Mode = "auto" | "peak" | "off";
 export type Phase = "rush" | "normal" | "night";
 export type Scenario = "after" | "before";
+export type RoadVehicleKind = "private" | "motorcycle" | "tricycle" | "public" | "other";
 
 export interface CarObj {
   id: number;
@@ -36,6 +37,7 @@ export interface CarObj {
   legIdx: number;
   dist: number;
   stallId: number;
+  vehicleKind: RoadVehicleKind;
   departAt: number;
 }
 
@@ -97,6 +99,26 @@ const ROAD_ROUTES: V3[][] = [
     [72, 0, 45.5],
   ],
 ];
+
+interface TrafficMix {
+  motorcycles: number;
+  publicTransport: number;
+  privateCars: number;
+  others: number;
+}
+
+const TRAFFIC_MIXES: { from: number; to: number; mix: TrafficMix }[] = [
+  { from: 360, to: 510, mix: { motorcycles: 165, publicTransport: 248, privateCars: 82, others: 64 } },
+  { from: 660, to: 780, mix: { motorcycles: 150, publicTransport: 81, privateCars: 51, others: 18 } },
+  { from: 960, to: 1200, mix: { motorcycles: 164, publicTransport: 200, privateCars: 146, others: 91 } },
+];
+
+const DEFAULT_TRAFFIC_MIX: TrafficMix = {
+  motorcycles: 80,
+  publicTransport: 55,
+  privateCars: 70,
+  others: 25,
+};
 
 function angleDamp(current: number, target: number, k: number): number {
   let d = target - current;
@@ -199,6 +221,7 @@ export class Engine {
       legIdx: 0,
       dist: 0,
       stallId: -1,
+      vehicleKind: "private",
       departAt: 0,
     };
   }
@@ -217,7 +240,14 @@ export class Engine {
 
   private takeRoadCarForParking(): CarObj | null {
     const candidates = this.cars
-      .filter((car) => car.state === "road" && car.z > 38 && car.z < 51 && car.x > 24)
+      .filter(
+        (car) =>
+          car.state === "road" &&
+          car.z > 38 &&
+          car.z < 51 &&
+          car.x > 24 &&
+          (car.vehicleKind === "private" || car.vehicleKind === "motorcycle" || car.vehicleKind === "tricycle"),
+      )
       .sort((a, b) => Math.hypot(a.x - 25, a.z - 42.5) - Math.hypot(b.x - 25, b.z - 42.5));
     const car = candidates[0];
     if (!car) return null;
@@ -236,6 +266,7 @@ export class Engine {
     const next = pts[1];
     const start = pts[0];
     const car = this.makeCar("road", start, Math.atan2(next[0] - start[0], next[2] - start[2]));
+    car.vehicleKind = this.pickRoadVehicleKind();
     const route = buildRoute(pts, 6);
     car.legs = [{ route, rev: false }];
     car.dist = Math.min(dist, Math.max(0, route.len - 1));
@@ -248,6 +279,27 @@ export class Engine {
       car.heading = Math.atan2(q[0] - p[0], q[2] - p[2]);
     }
     return car;
+  }
+
+  private currentTrafficMix(): TrafficMix {
+    const min = this.clockSec() / 60;
+    return TRAFFIC_MIXES.find((window) => min >= window.from && min < window.to)?.mix ?? DEFAULT_TRAFFIC_MIX;
+  }
+
+  private pickRoadVehicleKind(): RoadVehicleKind {
+    const mix = this.currentTrafficMix();
+    const tricycles = mix.others * 0.62;
+    const otherVehicles = mix.others - tricycles;
+    const total = mix.motorcycles + mix.publicTransport + mix.privateCars + tricycles + otherVehicles;
+    let pick = Math.random() * total;
+    pick -= mix.motorcycles;
+    if (pick < 0) return "motorcycle";
+    pick -= mix.publicTransport;
+    if (pick < 0) return "public";
+    pick -= mix.privateCars;
+    if (pick < 0) return "private";
+    pick -= tricycles;
+    return pick < 0 ? "tricycle" : "other";
   }
 
   private seedRoadTraffic(phase: Phase) {
