@@ -2,8 +2,9 @@
 
 import { useRef, useSyncExternalStore } from "react";
 import * as THREE from "three";
-import { useFrame, useThree } from "@react-three/fiber";
+import { useFrame } from "@react-three/fiber";
 import { CarObj, Engine } from "@/lib/sim/engine";
+import { STALLS } from "@/lib/sim/layout";
 
 function CarMesh({ car }: { car: CarObj }) {
   const g = useRef<THREE.Group>(null);
@@ -41,13 +42,49 @@ function CarMesh({ car }: { car: CarObj }) {
   );
 }
 
+function MotorMesh({ car }: { car: CarObj }) {
+  const g = useRef<THREE.Group>(null);
+  useFrame(() => {
+    const grp = g.current;
+    if (!grp) return;
+    grp.position.set(car.x, car.y, car.z);
+    grp.rotation.y = car.heading;
+  });
+  return (
+    <group ref={g}>
+      <mesh position={[0, 0.54, 0]} castShadow>
+        <boxGeometry args={[0.36, 0.28, 1.35]} />
+        <meshStandardMaterial color={car.color} metalness={0.25} roughness={0.45} />
+      </mesh>
+      <mesh position={[0, 0.74, -0.18]} castShadow>
+        <boxGeometry args={[0.5, 0.18, 0.62]} />
+        <meshStandardMaterial color="#24282f" metalness={0.35} roughness={0.3} />
+      </mesh>
+      <mesh position={[0, 0.83, 0.72]} castShadow>
+        <boxGeometry args={[0.9, 0.06, 0.08]} />
+        <meshStandardMaterial color="#17191c" />
+      </mesh>
+      {([-0.82, 0.82] as const).map((z) => (
+        <mesh key={z} position={[0, 0.34, z]} rotation={[0, Math.PI / 2, 0]} castShadow>
+          <torusGeometry args={[0.28, 0.055, 8, 18]} />
+          <meshStandardMaterial color="#111216" />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
 export function Cars({ engine }: { engine: Engine }) {
   useSyncExternalStore(engine.subscribe, engine.getVersion, engine.getVersion);
   return (
     <>
-      {engine.cars.map((c) => (
-        <CarMesh key={c.id} car={c} />
-      ))}
+      {engine.cars.map((c) =>
+        c.stallId >= 0 && STALLS[c.stallId]?.vehicle === "motor" ? (
+          <MotorMesh key={c.id} car={c} />
+        ) : (
+          <CarMesh key={c.id} car={c} />
+        ),
+      )}
     </>
   );
 }
@@ -69,10 +106,9 @@ export function DayNight({ engine }: { engine: Engine }) {
   const sun = useRef<THREE.DirectionalLight>(null);
   const amb = useRef<THREE.AmbientLight>(null);
   const hemi = useRef<THREE.HemisphereLight>(null);
-  const scene = useThree((s) => s.scene);
   const bg = useRef(new THREE.Color());
 
-  useFrame(() => {
+  useFrame(({ scene }) => {
     const h = engine.clockSec() / 3600;
     const dayF = Math.max(0, Math.sin((Math.PI * (h - 6)) / 13));
     const twil =

@@ -76,13 +76,21 @@ function Ground() {
         <boxGeometry args={[100, 0.12, 80]} />
         <meshStandardMaterial color={COL.asphalt} />
       </mesh>
-      {/* south road (entrance/exit road) and east road */}
-      <mesh position={[0, -0.08, 48]} receiveShadow>
+      {/* south road runs directly in front of the house and gate area */}
+      <mesh position={[0, -0.08, 44.5]} receiveShadow>
+        <boxGeometry args={[400, 0.12, 9]} />
+        <meshStandardMaterial color={COL.road} />
+      </mesh>
+      <mesh position={[0, -0.08, -48]} receiveShadow>
         <boxGeometry args={[400, 0.12, 11]} />
         <meshStandardMaterial color={COL.road} />
       </mesh>
-      <mesh position={[59, -0.09, 10]} receiveShadow>
-        <boxGeometry args={[11, 0.12, 300]} />
+      <mesh position={[72, -0.09, -98]} receiveShadow>
+        <boxGeometry args={[11, 0.12, 100]} />
+        <meshStandardMaterial color={COL.road} />
+      </mesh>
+      <mesh position={[0, -0.09, 95]} receiveShadow>
+        <boxGeometry args={[11, 0.12, 110]} />
         <meshStandardMaterial color={COL.road} />
       </mesh>
     </group>
@@ -91,11 +99,11 @@ function Ground() {
 
 function Walls() {
   const segs: { pos: V3; size: V3 }[] = [
-    { pos: [0, 1.2, -40], size: [100.6, 2.4, 0.6] },
+    { pos: [-8.5, 1.2, -40], size: [83, 2.4, 0.6] },
+    { pos: [47, 1.2, -40], size: [6, 2.4, 0.6] },
     { pos: [50, 1.2, 0], size: [0.6, 2.4, 80] },
     { pos: [-50, 1.2, 0], size: [0.6, 2.4, 80] },
     { pos: [-39.5, 1.2, 40], size: [21, 2.4, 0.6] },
-    { pos: [0, 1.2, 40], size: [42, 2.4, 0.6] },
     { pos: [39.5, 1.2, 40], size: [21, 2.4, 0.6] },
   ];
   return (
@@ -103,6 +111,35 @@ function Walls() {
       {segs.map((s, i) => (
         <mesh key={i} position={s.pos} castShadow receiveShadow>
           <boxGeometry args={s.size} />
+          <meshStandardMaterial color={COL.wall} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function HouseFrontWall() {
+  const segments: { pos: V3; size: V3 }[] = [
+    { pos: [-16.25, 1.05, 39.15], size: [12.5, 2.1, 0.72] },
+    { pos: [16.25, 1.05, 39.15], size: [12.5, 2.1, 0.72] },
+  ];
+  const caps: V3[] = [
+    [-22.5, 1.05, 39.15],
+    [-10, 1.05, 39.15],
+    [10, 1.05, 39.15],
+    [22.5, 1.05, 39.15],
+  ];
+  return (
+    <group>
+      {segments.map((s, i) => (
+        <mesh key={i} position={s.pos} castShadow receiveShadow>
+          <boxGeometry args={s.size} />
+          <meshStandardMaterial color={COL.wall} />
+        </mesh>
+      ))}
+      {caps.map((pos, i) => (
+        <mesh key={i} position={pos} castShadow receiveShadow>
+          <cylinderGeometry args={[0.36, 0.36, 2.1, 18]} />
           <meshStandardMaterial color={COL.wall} />
         </mesh>
       ))}
@@ -144,7 +181,7 @@ function HipRoof({ position }: { position: V3 }) {
 
 function Office() {
   return (
-    <group position={[0, 0, 33.5]}>
+    <group position={[0, 0, 33.5]} rotation={[0, Math.PI, 0]}>
       <mesh position={[0, 1.6, 0]} castShadow receiveShadow>
         <boxGeometry args={[22, 3.2, 7]} />
         <meshStandardMaterial color={COL.wall} />
@@ -155,7 +192,7 @@ function Office() {
         <meshStandardMaterial color={COL.roofBrown} />
       </mesh>
       <HipRoof position={[0, 3.38, 0]} />
-      {/* door + windows on the south face */}
+      {/* door + windows on the front face */}
       <mesh position={[0, 1.15, -3.55]}>
         <boxGeometry args={[1.6, 2.3, 0.1]} />
         <meshStandardMaterial color="#4a4640" />
@@ -182,11 +219,6 @@ function CanopyRows() {
       out.push({ pos: [48.3, 1.55, z], scale: [1, 3.1, 1] });
       out.push({ pos: [43.7, 1.18, z], scale: [1, 2.35, 1] });
     }
-    for (let i = 0; i < 10; i++) {
-      const x = -24.75 + i * 5.5;
-      out.push({ pos: [x, 1.55, -38.0], scale: [1, 3.1, 1] });
-      out.push({ pos: [x, 1.18, -33.4], scale: [1, 2.35, 1] });
-    }
     return out;
   }, []);
   return (
@@ -198,10 +230,6 @@ function CanopyRows() {
       </mesh>
       <mesh position={[46, 2.75, -8.75]} rotation={[0, 0, 0.14]} castShadow>
         <boxGeometry args={[5.8, 0.14, 44.5]} />
-        <meshStandardMaterial color={COL.canopy} metalness={0.35} roughness={0.6} />
-      </mesh>
-      <mesh position={[0, 2.75, -35.7]} rotation={[0.14, 0, 0]} castShadow>
-        <boxGeometry args={[49.8, 0.14, 5.8]} />
         <meshStandardMaterial color={COL.canopy} metalness={0.35} roughness={0.6} />
       </mesh>
     </group>
@@ -404,20 +432,24 @@ function Ramp() {
 // ------------------------------------------------------------ markings ----
 
 function StallLines() {
-  const groundItems = useMemo(() => {
-    const out: Item[] = [];
+  const { carItems, motorItems } = useMemo(() => {
+    const carItems: Item[] = [];
+    const motorItems: Item[] = [];
     for (const s of STALLS) {
       if (s.roof) continue;
       const px = Math.cos(s.heading);
       const pz = -Math.sin(s.heading);
-      for (const side of [-2.7, 2.7]) {
-        out.push({
+      const isMotor = s.vehicle === "motor";
+      const halfWidth = isMotor ? 1.35 : 2.7;
+      const items = isMotor ? motorItems : carItems;
+      for (const side of [-halfWidth, halfWidth]) {
+        items.push({
           pos: [s.pos[0] + px * side, 0.025, s.pos[2] + pz * side],
           rot: [0, s.heading, 0],
         });
       }
     }
-    return out;
+    return { carItems, motorItems };
   }, []);
   // Roof: stall dividers anchored at the pad edge, extending one stall-depth
   // outward at 45° so opposite flanks form chevrons at the strip midline and
@@ -428,7 +460,8 @@ function StallLines() {
   );
   return (
     <group>
-      <InstancedBoxes items={groundItems} size={[0.14, 0.02, 5.2]} color={COL.line} />
+      <InstancedBoxes items={carItems} size={[0.14, 0.02, 5.2]} color={COL.line} />
+      <InstancedBoxes items={motorItems} size={[0.1, 0.02, 3.7]} color={COL.line} />
       <InstancedBoxes items={roofItems} size={[0.14, 0.02, ROOF_LINE_LEN]} color={COL.line} />
     </group>
   );
@@ -483,8 +516,13 @@ function Gates({ engine }: { engine: Engine }) {
         <boxGeometry args={[2.2, 2.6, 2.2]} />
         <meshStandardMaterial color={COL.wall} />
       </mesh>
+      <mesh position={[45.5, 1.3, -40]} castShadow>
+        <boxGeometry args={[2.2, 2.6, 2.2]} />
+        <meshStandardMaterial color={COL.wall} />
+      </mesh>
       <GateArm pivot={[28.9, 1.1, 41]} dir={1} isOpen={() => engine.simTime < engine.gateInBusyUntil} />
       <GateArm pivot={[-28.9, 1.1, 41]} dir={-1} isOpen={() => engine.simTime < engine.gateOutBusyUntil} />
+      <GateArm pivot={[43.7, 1.1, -40]} dir={1} isOpen={() => engine.simTime < engine.gateInNorthBusyUntil} />
     </group>
   );
 }
@@ -559,13 +597,15 @@ export default function Scene({ engine }: { engine: Engine }) {
       <Ground />
       <Walls />
       <Office />
+      <HouseFrontWall />
       <CanopyRows />
       <Deck />
       <Ramp />
       <StallLines />
       <Gates engine={engine} />
       <TextSprite text="ENTRANCE" bg="#1f8a4c" position={[25, 5.6, 44]} width={8.5} />
-      <TextSprite text="EXIT" bg="#c43a30" position={[-25, 5.6, 44]} width={6.5} />
+      <TextSprite text="EXIT" bg="#c43a30" position={[-25, 5.15, 44]} width={5.6} />
+      <TextSprite text="ENTRANCE 2" bg="#1f8a4c" position={[39, 5.6, -44]} width={8.5} />
       <Tree pos={[-44, 0, -34]} s={1.1} />
       <Tree pos={[44, 0, -34]} />
       <Tree pos={[-44, 0, 30]} s={0.95} />

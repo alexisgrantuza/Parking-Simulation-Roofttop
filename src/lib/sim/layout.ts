@@ -1,7 +1,8 @@
 // Geometry layout of the parking facility, derived from the client's renders:
-// - Walled lot (100m x 80m) with an entrance gate (east-south) and exit gate (west-south)
+// - Walled lot (100m x 80m) with front/back entrance gates and a west-front exit gate
 // - Central elevated parking deck with a ramp on the east side and parking underneath
-// - Perimeter canopy-covered stalls along the west, east and north walls
+// - Canopy-covered car stalls along the east wall, motorcycle/bike stalls along the west wall,
+//   and open car stalls along the north wall
 // - Small office building at the south side between the two gates
 
 export type V3 = [number, number, number];
@@ -9,8 +10,11 @@ export type V3 = [number, number, number];
 export const DECK_TOP = 3.4;
 
 export const GATE_IN: V3 = [25, 0, 41];
+export const GATE_IN_NORTH: V3 = [39, 0, -41];
 export const GATE_OUT: V3 = [-25, 0, 41];
-export const SPAWN: V3 = [92, 0, 47.5];
+export const SPAWN: V3 = [92, 0, 42.5];
+export const SPAWN_NORTH: V3 = [92, 0, -48.5];
+export type EntranceId = "east" | "north";
 
 export type StallKind = "wallE" | "wallW" | "wallN" | "under" | "roofE" | "roofW";
 
@@ -20,6 +24,7 @@ export interface StallDef {
   pos: V3;
   heading: number; // rotation around Y; forward = (sin h, 0, cos h)
   roof: boolean;
+  vehicle?: "car" | "motor";
   padX?: number; // roof stalls: x of the stadium pad lane that serves them
 }
 
@@ -40,8 +45,15 @@ function makeStalls(): StallDef[] {
   let id = 0;
   for (let i = 0; i < 8; i++)
     out.push({ id: id++, kind: "wallE", pos: [46, 0, -28 + i * 5.5], heading: Math.PI / 2, roof: false });
-  for (let i = 0; i < 8; i++)
-    out.push({ id: id++, kind: "wallW", pos: [-46, 0, -28 + i * 5.5], heading: -Math.PI / 2, roof: false });
+  for (let i = 0; i < 16; i++)
+    out.push({
+      id: id++,
+      kind: "wallW",
+      pos: [-46.7, 0, -30 + i * 2.8],
+      heading: -Math.PI / 2,
+      roof: false,
+      vehicle: "motor",
+    });
   for (let i = 0; i < 9; i++)
     out.push({ id: id++, kind: "wallN", pos: [-22 + i * 5.5, 0, -35.5], heading: Math.PI, roof: false });
   for (let i = 0; i < 7; i++)
@@ -153,24 +165,35 @@ const BAND_IN = -22.8;
 const BAND_OUT = -20.4;
 
 /** Driving route from a point outside the entrance gate to the assigned stall. */
-export function inboundWaypoints(s: StallDef, from: V3): V3[] {
-  const head: V3[] = [from, GATE_IN, [25, Y, 34]];
+export function inboundWaypoints(s: StallDef, from: V3, entrance: EntranceId = "east"): V3[] {
+  const head: V3[] =
+    entrance === "north"
+      ? [from, GATE_IN_NORTH, [39, Y, -32]]
+      : [from, GATE_IN, [25, Y, 34], [30, Y, 28], [35, Y, 18]];
   const [sx, , sz] = s.pos;
   switch (s.kind) {
     case "wallE":
-      return [...head, [30, Y, 28], [35, Y, 18], [35, Y, sz], [sx, Y, sz]];
+      return entrance === "north"
+        ? [...head, [35, Y, -30], [35, Y, sz], [sx, Y, sz]]
+        : [...head, [35, Y, sz], [sx, Y, sz]];
     case "wallN":
-      return [...head, [30, Y, 28], [35, Y, 18], [35, Y, -30], [sx, Y, -30], [sx, Y, sz]];
+      return entrance === "north"
+        ? [...head, [sx, Y, -32], [sx, Y, sz]]
+        : [...head, [35, Y, -30], [sx, Y, -30], [sx, Y, sz]];
     case "wallW":
-      return [...head, [30, Y, 28], [35, Y, 18], [35, Y, -30], [-35, Y, -30], [-35, Y, sz], [sx, Y, sz]];
+      return entrance === "north"
+        ? [...head, [-35, Y, -30], [-35, Y, sz], [sx, Y, sz]]
+        : [...head, [35, Y, -30], [-35, Y, -30], [-35, Y, sz], [sx, Y, sz]];
     case "under":
-      return [from, GATE_IN, [25, Y, 32], [19, Y, 20], [17, Y, 8], [sx, Y, 8], [sx, Y, sz]];
+      return entrance === "north"
+        ? [...head, [35, Y, -16], [18, Y, 8], [sx, Y, 8], [sx, Y, sz]]
+        : [from, GATE_IN, [25, Y, 32], [19, Y, 20], [17, Y, 8], [sx, Y, 8], [sx, Y, sz]];
     case "roofE":
     case "roofW": {
       const lane = (s.padX ?? 0) - 1.1;
       return [
         ...head,
-        [26, Y, 26],
+        entrance === "north" ? [39, Y, -28] : [26, Y, 13],
         [26, Y, 13],
         [26, D, -13.5],
         [24, D, -18],
@@ -257,8 +280,12 @@ export function leaveWaypoints(from: V3): V3[] {
 
 const ENTRANCE_QUEUE_POLY: V3[] = [
   [25, 0, 42.5],
-  [25, 0, 47.5],
-  [92, 0, 47.5],
+  [92, 0, 42.5],
+];
+const ENTRANCE_QUEUE_NORTH_POLY: V3[] = [
+  [39, 0, -42.5],
+  [39, 0, -48.5],
+  [92, 0, -48.5],
 ];
 
 function pointAlongPoly(poly: V3[], d: number): V3 {
@@ -271,8 +298,8 @@ function pointAlongPoly(poly: V3[], d: number): V3 {
   return poly[poly.length - 1];
 }
 
-export function entranceQueuePoint(i: number): V3 {
-  return pointAlongPoly(ENTRANCE_QUEUE_POLY, 4 + 7 * i);
+export function entranceQueuePoint(i: number, entrance: EntranceId = "east"): V3 {
+  return pointAlongPoly(entrance === "north" ? ENTRANCE_QUEUE_NORTH_POLY : ENTRANCE_QUEUE_POLY, 4 + 7 * i);
 }
 
 export function exitQueuePoint(i: number): V3 {
